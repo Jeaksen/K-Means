@@ -1,8 +1,10 @@
 #pragma once
 #include <vector>
 #include <random>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
 
-template<int dim>
+template<unsigned int dim>
 class PointsGenerator
 {
 	const float bound = 100.0f;
@@ -10,17 +12,19 @@ class PointsGenerator
 	std::uniform_real_distribution<float> distribution{-bound, bound};
 
 	std::vector<float> generatePoint();
-
+	
 public:
 	PointsGenerator() {};
-	std::vector<std::vector<float>> generatePointsDevice(int N);
+	std::vector<std::vector<float>> generatePointsHost(unsigned long N);
 	std::vector<std::vector<float>> generateCentroidsHost(int k);
-	std::vector<std::vector<float>> soaToAos(const std::vector<std::vector<float>> & points);
-	std::vector<std::vector<float>> aosToSoa(const std::vector<std::vector<float>> & points);
+	thrust::device_vector<float> generatePointsDevice(unsigned long N);
+	thrust::device_vector<float> generateCentroidsDevice(int k);
+	std::vector<std::vector<float>> deviceToHost(const thrust::device_vector<float>& points);
+	thrust::device_vector<float> hostToDevice(const std::vector<std::vector<float>> & points);
 };
 
 
-template<int dim>
+template<unsigned int dim>
 std::vector<float> PointsGenerator<dim>::generatePoint()
 {
 	std::vector<float> point;
@@ -31,66 +35,70 @@ std::vector<float> PointsGenerator<dim>::generatePoint()
 	return point;
 }
 
-template<int dim>
-std::vector<std::vector<float>> PointsGenerator<dim>::generatePointsDevice(int count)
+template<unsigned int dim>
+thrust::device_vector<float> PointsGenerator<dim>::generatePointsDevice(unsigned long count)
 {
-	std::vector<std::vector<float>> points;
-	for (size_t i = 0; i < dim; i++)
-		points.push_back(std::vector<float>());
+	thrust::host_vector<float> points{ ((unsigned long)dim) * count };
 
 	for (size_t i = 0; i < count; i++)
 	{
 		auto point = generatePoint();
 		for (size_t j = 0; j < dim; j++)
-			points[j].push_back(point[j]);
+			points[j * count + i] = point[j];
 	}
 	return points;
 }
 
-template<int dim>
-std::vector<std::vector<float>> PointsGenerator<dim>::generateCentroidsHost(int k)
+template<unsigned int dim>
+std::vector<std::vector<float>>  PointsGenerator<dim>::generatePointsHost(unsigned long count)
 {
 	std::vector<std::vector<float>> points;
-	for (size_t i = 0; i < k; i++)
-	{
+
+	for (size_t i = 0; i < count; i++)
 		points.push_back(generatePoint());
-	}
+
 	return points;
 }
 
-template<int dim>
-std::vector<std::vector<float>> PointsGenerator<dim>::soaToAos(const std::vector<std::vector<float>>& points)
+template<unsigned int dim>
+std::vector<std::vector<float>> PointsGenerator<dim>::generateCentroidsHost(int k)
 {
-	std::vector<std::vector<float>> output;
-	std::vector<float> point;
+	return generatePointsHost(k);
+}
 
-	for (size_t i = 0; i < points[0].size(); i++)
+template<unsigned int dim>
+thrust::device_vector<float> PointsGenerator<dim>::generateCentroidsDevice(int k)
+{
+	return generatePointsDevice(k);
+}
+
+template<unsigned int dim>
+std::vector<std::vector<float>> PointsGenerator<dim>::deviceToHost(const thrust::device_vector<float> & points)
+{
+	unsigned long size = points.size() / dim;
+	std::vector<std::vector<float>> output;
+	std::vector<float> point{ dim };
+	
+	for (size_t i = 0; i < size; i++)
 	{
-		point.clear();
 		for (size_t j = 0; j < dim; j++)
-		{
-			point.push_back(points[j][i]);
-		}
+			point[j] = points[j * size + i];
+
 		output.push_back(point);
 	}
 
 	return output;
 }
 
-template<int dim>
-std::vector<std::vector<float>> PointsGenerator<dim>::aosToSoa(const std::vector<std::vector<float>>& points)
+template<unsigned int dim>
+thrust::device_vector<float> PointsGenerator<dim>::hostToDevice(const std::vector<std::vector<float>> & points)
 {
-	std::vector<std::vector<float>> output;
-	for (size_t i = 0; i < dim; i++)
-		output.push_back(std::vector<float>());
+	unsigned long size = points.size();
+	thrust::host_vector<float> output{ ((unsigned long)dim) * size };
 
-	for (size_t i = 0; i < points.size(); i++)
-	{
+	for (size_t i = 0; i < size; i++)
 		for (size_t j = 0; j < dim; j++)
-		{
-			output[j].push_back(points[i][j]);
-		}
-	}
+			output[j * size + i] = points[i][j];
 
 	return output;
 }
