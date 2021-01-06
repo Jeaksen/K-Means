@@ -15,6 +15,8 @@ public:
 	PointsGenerator() {};
 	std::vector<std::vector<float>> generatePointsDevice(int N);
 	std::vector<std::vector<float>> generateCentroidsHost(int k);
+	std::vector<std::vector<float>> soaToAos(const std::vector<std::vector<float>> & points);
+	std::vector<std::vector<float>> aosToSoa(const std::vector<std::vector<float>> & points);
 };
 
 
@@ -54,4 +56,41 @@ std::vector<std::vector<float>> PointsGenerator<dim>::generateCentroidsHost(int 
 		points.push_back(generatePoint());
 	}
 	return points;
+}
+
+template<int dim>
+std::vector<std::vector<float>> PointsGenerator<dim>::soaToAos(const std::vector<std::vector<float>>& points)
+{
+	std::vector<std::vector<float>> output;
+	std::vector<float> point;
+
+	for (size_t i = 0; i < points[0].size(); i++)
+	{
+		point.clear();
+		for (size_t j = 0; j < dim; j++)
+		{
+			point.push_back(points[j][i]);
+		}
+		output.push_back(point);
+	}
+
+	return output;
+}
+
+template<int dim>
+std::vector<std::vector<float>> PointsGenerator<dim>::aosToSoa(const std::vector<std::vector<float>>& points)
+{
+	std::vector<std::vector<float>> output;
+	for (size_t i = 0; i < dim; i++)
+		output.push_back(std::vector<float>());
+
+	for (size_t i = 0; i < points.size(); i++)
+	{
+		for (size_t j = 0; j < dim; j++)
+		{
+			output[j].push_back(points[i][j]);
+		}
+	}
+
+	return output;
 }

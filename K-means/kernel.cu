@@ -10,10 +10,12 @@
 #include <math.h>
 #include <cmath>
 
+
+const unsigned long N = 30000000;
 #define DIM 3
-#define N 100000
-#define THRESHOLD 0.1
+#define THRESHOLD 0.01
 #define K 5
+#define MY_DEBUG false
 
 cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
@@ -106,42 +108,51 @@ Error:
 }
 
 
-std::vector<std::vector<float>> SoaToAos(std::vector<std::vector<float>> points)
+void displayPointsDevice(const std::vector<std::vector<float>>& points)
 {
-    std::vector<std::vector<float>> output;
-    std::vector<float> point;
-
-    for (size_t i = 0; i < N; i++)
+    for (size_t i = 0; i < points[0].size(); i++)
     {
-        point.clear();
-        for (size_t j = 0; j < DIM; j++)
+        for (size_t j = 0; j < points.size(); j++)
         {
-            point.push_back(points[j][i]);
+            std::cout << std::setw(9) << std::setprecision(6) << points[j][i];
         }
-        output.push_back(point);
+        std::cout << std::endl;
     }
-
-    return output;
 }
 
-float distance(std::vector<float> p1, std::vector<float> p2)
+void displayPointsHost(const std::vector<std::vector<float>>& points)
+{
+    for (size_t i = 0; i < points.size(); i++)
+    {
+        for (size_t j = 0; j < points[0].size(); j++)
+        {
+            std::cout << std::setw(9) << std::setprecision(6) << points[i][j];
+        }
+        std::cout << std::endl;
+    }
+}
+
+
+// Calcuates the Euclidean distance between two points
+float distance(const std::vector<float>& p1, const std::vector<float>& p2)
 {
     double sum = 0;
     for (size_t i = 0; i < DIM; i++)
-    {
         sum += pow(double(p2[i] - p1[i]), 2.0);
-    }
+
     return sqrt(sum);
 }
 
 
-void lloyd_cpu(std::vector<std::vector<float>> points, PointsGenerator<DIM> generator)
+void lloyd_cpu(const std::vector<std::vector<float>>& points, PointsGenerator<DIM>& generator)
 {
-    int delta = N;
-    int membership[N];
-    int centroidsSizes[K];
-    std::vector<std::vector<float>> newCentroids;
+    long delta = N;
+    short* membership = new short[N] {};
+    long centroidsSizes[K] {};
+    float newCentroids[K][DIM] {};
+
     auto centroids = generator.generateCentroidsHost(K);
+    if (MY_DEBUG) displayPointsHost(centroids);
 
     while (delta / (float)N > THRESHOLD)
     {
@@ -149,8 +160,8 @@ void lloyd_cpu(std::vector<std::vector<float>> points, PointsGenerator<DIM> gene
         for (size_t i = 0; i < N; i++)
         {
             float minDist = INT_MAX, tempDist;
-            int index = -1;
-            for (size_t j = 0; j < DIM; j++)
+            short index = -1;
+            for (size_t j = 0; j < K; j++)
             {
                 tempDist = distance(points[i], centroids[j]);
                 if (minDist > tempDist)
@@ -159,27 +170,62 @@ void lloyd_cpu(std::vector<std::vector<float>> points, PointsGenerator<DIM> gene
                     index = j;
                 }
             }
+            centroidsSizes[index]++;
+            for (size_t j = 0; j < DIM; j++)
+                newCentroids[index][j] += points[i][j];
+
             if (membership[i] != index)
             {
                 membership[i] = index;
-                centroidsSizes[index]++;
                 delta++;
-                for (size_t j = 0; j < DIM; j++)
-                {
-                    newCentroids[index][j] += points[i][j];
-                }
             }
+            if (membership[i] == -1)
+                std::cout << "wtf";
         }
+        //std::cout << "Membership:" << std::endl;
+        //for (size_t i = 0; i < N; i++)
+        //    std::cout << membership[i] << " ";
+        //std::cout << std::endl;
+
+        //std::cout << "centroidsSizes:" << std::endl;
+        //for (size_t i = 0; i < K; i++)
+        //    std::cout << centroidsSizes[i] << " ";
+        //std::cout << std::endl;
+
+        //std::cout << "newCentroids:" << std::endl;
+        //for (size_t i = 0; i < K; i++)
+        //{
+        //    for (size_t j = 0; j < DIM; j++)
+        //    {
+        //        std::cout << newCentroids[i][j] << " ";
+        //    }
+        //    std::cout << std::endl;
+        //}
 
         for (size_t i = 0; i < K; i++)
         {
             for (size_t j = 0; j < DIM; j++)
             {
                 centroids[i][j] = newCentroids[i][j] / centroidsSizes[i];
+                newCentroids[i][j] = 0;
             }
+            centroidsSizes[i] = 0;
         }
+        
+        std::cout << "delta: ";
+        std::cout << delta / (float)N << std::endl;
+        if(MY_DEBUG) displayPointsHost(centroids);
     }
+    if (MY_DEBUG)
+    {
+        std::cout << "Membership:" << std::endl;
+        for (size_t i = 0; i < N; i++)
+            std::cout << membership[i] << " ";
+        std::cout << std::endl;
+    }
+    displayPointsHost(centroids);
 
+    delete[] membership;
 }
 
 int main()
@@ -190,16 +236,12 @@ int main()
     stopwatch.Start();
     auto points = gen.generatePointsDevice(N);
     stopwatch.Stop();
+    if (MY_DEBUG) displayPointsDevice(points);
 
-    auto h_points = SoaToAos(points);
 
-    //for (size_t i = 0; i < N; i++)
-    //{
-    //    for (size_t j = 0; j < DIM; j++)
-    //    {
-    //        std::cout << std::setw(9) << std::setprecision(6) << points[j][i];
-    //    }
-    //    std::cout << std::endl;
-    //}
+    auto h_points = gen.soaToAos(points);
+    stopwatch.Start();
+    lloyd_cpu(h_points, gen);
+    stopwatch.Stop();
     return 0;
 }
