@@ -3,12 +3,13 @@
 #include <random>
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <chrono>
 
 template<unsigned int dim>
 class PointsGenerator
 {
 	const float bound = 100.0f;
-	std::default_random_engine generator{ 1 };
+	std::default_random_engine generator{ std::chrono::system_clock::now().time_since_epoch().count() };
 	std::uniform_real_distribution<float> distribution{-bound, bound};
 
 	std::vector<float> generatePoint();
@@ -75,14 +76,15 @@ thrust::device_vector<float> PointsGenerator<dim>::generateCentroidsDevice(int k
 template<unsigned int dim>
 std::vector<std::vector<float>> PointsGenerator<dim>::deviceToHost(const thrust::device_vector<float> & points)
 {
-	unsigned long size = points.size() / dim;
+	thrust::host_vector<float> h_points{ points };
+	unsigned long size = h_points.size() / (unsigned long)dim;
 	std::vector<std::vector<float>> output;
-	std::vector<float> point{ dim };
+	auto point = std::vector<float> (dim);
 	
 	for (size_t i = 0; i < size; i++)
 	{
 		for (size_t j = 0; j < dim; j++)
-			point[j] = points[j * size + i];
+			point[j] = h_points[i + j * size];
 
 		output.push_back(point);
 	}
