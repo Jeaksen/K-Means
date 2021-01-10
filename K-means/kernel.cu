@@ -13,12 +13,12 @@
 #include <thrust/count.h>
 #include <thrust/fill.h>
 
-const unsigned long N = 1000000UL;
+const unsigned long N = 10000000UL;
 const unsigned int DIM = 3;
 const double THRESHOLD = 0.01;
 const unsigned int K = 5;
 const bool SHOULD_DEBUG = false;
-const int SHARED_MEM_SIZE = 49152;
+const int SHARED_MEM_SIZE = 24576;
 const int MEMBERSHIP_SHARED_MEM_SIZE = SHARED_MEM_SIZE / sizeof(short);
 
 void displayPointsDevice(const thrust::host_vector<float>& points)
@@ -105,6 +105,40 @@ __global__ void findNewCentroids(const float* points, const short* membership, f
     int centroidIndex = threadIndex / DIM;
     unsigned long stride = threadIndex - DIM * centroidIndex;
     unsigned long size = centroidsSizes[centroidIndex];
+    unsigned long sharedMemStride = blockDim.x;
+    float center = 0;
+    __shared__ short local_membership[MEMBERSHIP_SHARED_MEM_SIZE];
+
+    size_t index = 0;
+    while (index < N)
+    {
+        for (size_t i = threadIndex; i < MEMBERSHIP_SHARED_MEM_SIZE && i + index < N; i += sharedMemStride)
+        {
+            local_membership[i] = membership[index + i];
+        }
+        __syncthreads();
+        for (size_t i = 0; i < MEMBERSHIP_SHARED_MEM_SIZE && i + index < N; i++, index++)
+        {
+            if (local_membership[i] == centroidIndex)
+                center += points[index + N * stride] / size;
+        }
+    }
+    //for (size_t i = 0; i < N; i++)
+    //{
+    //    if (membership[i] == centroidIndex)
+    //        center += points[ i + N * stride] / size;
+    //}
+    //printf("index: %d  centroid: %d  stride: %d  size: %d  center: %f  output index: %d\n", threadIndex, centroidIndex, stride, size, center, stride * K + centroidIndex);
+
+    newCentroids[stride * K + centroidIndex] = center;
+}
+
+__global__ void findNewCentroids2(const float* points, const short* membership, float* newCentroids, const unsigned long* centroidsSizes)
+{
+    int threadIndex = threadIdx.x;
+    int centroidIndex = threadIndex / DIM;
+    unsigned long stride = threadIndex - DIM * centroidIndex;
+    unsigned long size = centroidsSizes[centroidIndex];
     float center = 0;
 
     for (size_t i = 0; i < N; i++)
@@ -180,8 +214,65 @@ void lloyd_gpu(const thrust::device_vector<float>& points, thrust::device_vector
     cudaEventRecord(stop, 0);
     cudaDeviceSynchronize();
     cudaEventElapsedTime(&time, start, stop);
-    std::cout << "GPU time: " << time << " ms" << std::endl;
     displayPointsDevice(centroids);
+    std::cout << "GPU time: " << time << " ms" << std::endl;
+
+}
+
+void lloyd_gpu2(const thrust::device_vector<float>& points, thrust::device_vector<float> centroids)
+{
+    thrust::device_vector<short> membership{ N, 0 };
+    thrust::device_vector<short> delta{ N, 0 };
+    thrust::device_vector<unsigned long> centroidsSizes{ K };
+    thrust::constant_iterator<unsigned long> ones(1);
+    unsigned long deltaCount = N;
+    float time;
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaError_t err;
+    int threads = 1024;
+    int blocks = ceil(N / (double)threads);
+    cudaEventRecord(start, 0);
+
+    while (deltaCount / (double)N > THRESHOLD)
+    {
+        if (SHOULD_DEBUG)
+        {
+            std::cout << "Centroids: " << std::endl;
+            displayPointsDevice(centroids);
+        }
+
+        assignPointToCentroid << < blocks, threads >> > (thrust::raw_pointer_cast(points.data()), thrust::raw_pointer_cast(centroids.data()), thrust::raw_pointer_cast(membership.data()), thrust::raw_pointer_cast(delta.data()));
+        err = cudaGetLastError();
+        if (err != cudaSuccess) printf("%s\n", cudaGetErrorString(err));
+
+        for (size_t i = 0; i < K; i++)
+            centroidsSizes[i] = thrust::count(membership.begin(), membership.end(), i);
+
+        findNewCentroids2 << <1, DIM* K >> > (thrust::raw_pointer_cast(points.data()), thrust::raw_pointer_cast(membership.data()), thrust::raw_pointer_cast(centroids.data()), thrust::raw_pointer_cast(centroidsSizes.data()));
+
+        deltaCount = thrust::count(delta.begin(), delta.end(), 1);
+        thrust::fill(delta.begin(), delta.end(), 0);
+
+        std::cout << "delta: " << deltaCount / (double)N << std::endl;
+        if (SHOULD_DEBUG)
+        {
+            for (size_t i = 0; i < K; i++)
+                std::cout << centroidsSizes[i] << " ";
+            std::cout << std::endl << std::endl;
+            std::cout << "Membership:" << std::endl;
+            for (size_t i = 0; i < N; i++)
+                std::cout << membership[i] << " ";
+            std::cout << std::endl;
+        }
+
+    }
+    cudaEventRecord(stop, 0);
+    cudaDeviceSynchronize();
+    cudaEventElapsedTime(&time, start, stop);
+    displayPointsDevice(centroids);
+    std::cout << "GPU time: " << time << " ms" << std::endl;
 
 }
 
@@ -248,7 +339,6 @@ void lloyd_cpu(const std::vector<std::vector<float>>& points, std::vector<std::v
 }
 
 
-
 int main()
 {
     Stopwatch stopwatch;
@@ -258,14 +348,17 @@ int main()
     stopwatch.Start();
     auto d_points = gen.generatePointsDevice(N);
     stopwatch.Stop();
-
+    std::cout << "Generating centroids ";
+    stopwatch.Start();
     auto d_centroids = gen.generateCentroidsDevice(K);
-    //if (SHOULD_DEBUG) displayPointsHost(h_points);
-        //std::cout << "Copying points ";
-    //stopwatch.Start();
+    stopwatch.Stop();
+
+    ////if (SHOULD_DEBUG) displayPointsHost(h_points);
+    std::cout << "Copying points ";
+    stopwatch.Start();
     auto h_points = gen.deviceToHost(d_points);
     auto h_centroids = gen.deviceToHost(d_centroids);
-    //stopwatch.Stop();
+    stopwatch.Stop();
 
     std::cout << std::endl << "LLoyd CPU ";
     stopwatch.Start();
@@ -274,6 +367,9 @@ int main()
 
     std::cout << std::endl << "LLoyd GPU" << std::endl << std::endl;
     lloyd_gpu(d_points, d_centroids);
+
+    std::cout << std::endl << "LLoyd GPU2" << std::endl << std::endl;
+    lloyd_gpu2(d_points, d_centroids);
 
 
     return 0;

@@ -4,6 +4,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <chrono>
+#include "Stopwatch.h"
 
 template<unsigned int dim>
 class PointsGenerator
@@ -39,6 +40,7 @@ std::vector<float> PointsGenerator<dim>::generatePoint()
 template<unsigned int dim>
 thrust::device_vector<float> PointsGenerator<dim>::generatePointsDevice(unsigned long count)
 {
+	Stopwatch stopwatch;
 	thrust::host_vector<float> points{ ((unsigned long)dim) * count };
 
 	for (size_t i = 0; i < count; i++)
