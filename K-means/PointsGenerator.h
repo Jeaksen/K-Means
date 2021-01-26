@@ -6,22 +6,39 @@
 #include <chrono>
 #include "Stopwatch.h"
 
+/*
+* This class provides functionality for generating sets of points. The points come from a uniform distribution [-bound, bound].
+* It supports arbitrary amount of dimensions.
+* Two ways of generating are possible:
+* - as a host vector of point vectors
+* - as a device vector which is a 1D representation of structure of arrays. Coefficients from same dimension are 
+* placed next to each other
+* 
+* The generator also provides functionality to convert those types of data representation
+*/
 template<unsigned int dim>
 class PointsGenerator
 {
-	const float bound = 100.0f;
+
+	const float bound;
 	std::default_random_engine generator{ std::chrono::system_clock::now().time_since_epoch().count() };
 	std::uniform_real_distribution<float> distribution{-bound, bound};
 
 	std::vector<float> generatePoint();
 	
 public:
-	PointsGenerator() {};
+	PointsGenerator(float bound = 100.0f): bound(bound) {};
+	// Generate N points as a vector of points
 	std::vector<std::vector<float>> generatePointsHost(unsigned long N);
+	// Generate K centroids as a vector of points
 	std::vector<std::vector<float>> generateCentroidsHost(int k);
+	// Generate N points as an structure of arrays flatened to 1D host vector
 	thrust::device_vector<float> generatePointsDevice(unsigned long N);
+	// Generate K centroids as an structure of arrays flatened to 1D host vector
 	thrust::device_vector<float> generateCentroidsDevice(int k);
+	// Convert points from structure of arrays form to vector of points
 	std::vector<std::vector<float>> deviceToHost(const thrust::device_vector<float>& points);
+	// Convert points form vector of points to structure of arrays
 	thrust::device_vector<float> hostToDevice(const std::vector<std::vector<float>> & points);
 };
 
