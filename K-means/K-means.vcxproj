@@ -77,7 +77,7 @@
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <CudaCompile Include="kernel.cu" />
+    <CudaCompile Include="KmeansKernel.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PointsGenerator.h" />
