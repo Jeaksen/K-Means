@@ -1,0 +1,13 @@
+﻿  Building Custom Rule C:/Users/pawlo/source/repos/K-means/K-means/CMakeLists.txt
+  Compiling CUDA source file ..\K-means\KmeansKernel.cu...
+  
+  C:\Users\pawlo\source\repos\K-means\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\bin\nvcc.exe" -gencode=arch=compute_52,code=\"compute_52,compute_52\" -gencode=arch=compute_52,code=\"sm_52,compute_52\" --use-local-env -ccbin "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.28.29333\bin\HostX64\x64" -x cu   -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\include"     --keep-dir x64\Release -maxrregcount=0  --machine 64 --compile -cudart static -Xcompiler="/EHsc -Ob2"    -D_WINDOWS -DNDEBUG -D"CMAKE_INTDIR=\"Release\"" -D"CMAKE_INTDIR=\"Release\"" -D_MBCS -Xcompiler "/EHsc /W1 /nologo /O2 /FdK-Means.dir\Release\vc142.pdb /FS   /MD /GR" -o K-Means.dir\Release\KmeansKernel.obj "C:\Users\pawlo\source\repos\K-means\K-means\KmeansKernel.cu" 
+C:\Users\pawlo\source\repos\K-means\K-means\PointsGenerator.h(24): warning : invalid narrowing conversion from "long long" to "unsigned int"
+            detected during instantiation of "PointsGenerator<dim>::PointsGenerator(float) [with dim=3U]" 
+  C:/Users/pawlo/source/repos/K-means/K-means/KmeansKernel.cu(68): here
+  
+C:\Users\pawlo\source\repos\K-means\K-means\PointsGenerator.h(24): warning : invalid narrowing conversion from "long long" to "unsigned int"
+  
+  KmeansKernel.cu
+     Creating library C:/Users/pawlo/source/repos/K-means/build/Release/K-Means.lib and object C:/Users/pawlo/source/repos/K-means/build/Release/K-Means.exp
+  K-Means.vcxproj -> C:\Users\pawlo\source\repos\K-means\build\Release\K-Means.exe

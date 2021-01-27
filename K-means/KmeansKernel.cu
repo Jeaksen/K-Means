@@ -11,8 +11,8 @@
 #include <thrust/count.h>
 #include <thrust/fill.h>
 
-const unsigned long N = 2000000UL;
-const unsigned int DIM = 3;
+const unsigned long N = 5000000UL;
+const unsigned int DIM = 6;
 const double THRESHOLD = 0.01;
 const unsigned int K = 5;
 const bool SHOULD_DEBUG = false;
@@ -83,10 +83,10 @@ int main()
     auto h_centroids = gen.deviceToHost(d_centroids);
     stopwatch.Stop();
 
-    std::cout << std::endl << "LLoyd CPU ";
-    stopwatch.Start();
-    lloyd_cpu<DIM>(h_points, h_centroids);
-    stopwatch.Stop();
+    //std::cout << std::endl << "LLoyd CPU ";
+    //stopwatch.Start();
+    //lloyd_cpu<DIM>(h_points, h_centroids);
+    //stopwatch.Stop();
 
     std::cout << std::endl << "LLoyd GPU Kernel" << std::endl;
     lloyd_gpu_kernel<DIM>(d_points, d_centroids);
@@ -113,6 +113,8 @@ void lloyd_gpu_kernel(const thrust::device_vector<float>& points, thrust::device
     unsigned long deltaCount = N;
     int threads = 1024;
     int blocks = ceil(N / (double)threads);
+    int threads_second_kernel = dim * K < 1024 ? dim * K : 1024;
+    int blocks_second_kernel = ceil(threads_second_kernel / (double)threads_second_kernel);
     float time;
 
     cudaError_t err;
@@ -130,7 +132,7 @@ void lloyd_gpu_kernel(const thrust::device_vector<float>& points, thrust::device
             displayPointsDevice<dim>(centroids);
         }
 
-        assignPointToCentroid<dim> << < blocks, threads >> > (thrust::raw_pointer_cast(points.data()), thrust::raw_pointer_cast(centroids.data()), thrust::raw_pointer_cast(membership.data()), thrust::raw_pointer_cast(delta.data()));
+        assignPointToCentroid<dim> <<< blocks, threads >>> (thrust::raw_pointer_cast(points.data()), thrust::raw_pointer_cast(centroids.data()), thrust::raw_pointer_cast(membership.data()), thrust::raw_pointer_cast(delta.data()));
         err = cudaGetLastError();
         if (err != cudaSuccess) printf("%s\n", cudaGetErrorString(err));
 
@@ -138,7 +140,7 @@ void lloyd_gpu_kernel(const thrust::device_vector<float>& points, thrust::device
         for (size_t i = 0; i < K; i++)
             centroidsSizes[i] = thrust::count(membership.begin(), membership.end(), i);
 
-        findNewCentroids<dim> << <1, dim* K >> > (thrust::raw_pointer_cast(points.data()), thrust::raw_pointer_cast(membership.data()),
+        findNewCentroids<dim> <<<blocks_second_kernel, threads_second_kernel >>> (thrust::raw_pointer_cast(points.data()), thrust::raw_pointer_cast(membership.data()),
             thrust::raw_pointer_cast(centroids.data()), thrust::raw_pointer_cast(centroidsSizes.data()));
 
 
@@ -311,10 +313,14 @@ __global__ void assignPointToCentroid(const float* points, const float* centroid
     int threadIndex = threadIdx.x + blockIdx.x * blockDim.x;
     if (threadIndex > N)
         return;
+    __shared__ float sm_centroids[dim * K];
+    for (size_t i = threadIdx.x; i < dim * K; i+= blockDim.x)
+        sm_centroids[i] = centroids[i];
+    __syncthreads();
 
     Point<dim> point{ points + threadIndex, N };
 
-    short centroidIndex = findClosestCentroid(point, centroids);
+    short centroidIndex = findClosestCentroid(point, sm_centroids);
 
     if (membership[threadIndex] != centroidIndex)
     {
@@ -331,11 +337,15 @@ __global__ void assignPointToCentroidWithSegmentation(const float* points, const
     int threadIndex = threadIdx.x + blockIdx.x * blockDim.x;
     if (threadIndex > N)
         return;
+    __shared__ float sm_centroids[dim * K];
+    for (size_t i = threadIdx.x; i < dim * K; i += blockDim.x)
+        sm_centroids[i] = centroids[i];
+    __syncthreads();
 
     Point<dim> point{ points + threadIndex, N };
 
     short prevCentroid = membership[threadIndex];
-    short newCentroid = findClosestCentroid(point, centroids);
+    short newCentroid = findClosestCentroid(point, sm_centroids);
 
     if (prevCentroid != newCentroid)
     {

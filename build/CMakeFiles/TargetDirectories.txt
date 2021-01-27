@@ -1,0 +1,3 @@
+C:/Users/pawlo/source/repos/K-means/build/CMakeFiles/K-Means.dir
+C:/Users/pawlo/source/repos/K-means/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/pawlo/source/repos/K-means/build/CMakeFiles/ZERO_CHECK.dir
